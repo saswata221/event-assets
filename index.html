@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Event Assets Picker</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; }
+    header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    select, input, button { padding: 8px 10px; font-size: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 18px; }
+    .card { border: 1px solid #e3e3e3; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+    .thumb { width: 100%; height: 150px; object-fit: cover; border-radius: 10px; background:#f6f6f6; }
+    .row { display: flex; gap: 8px; align-items: center; }
+    .path { font-size: 12px; color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .copyok { color: #0a8; font-size: 12px; margin-left: 6px; }
+    footer { margin-top: 20px; color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>Folder:</strong>
+    <select id="folder">
+      <option value="artists">artists</option>
+      <option value="poster">poster</option>
+      <option value="h_poster">h_poster</option>
+    </select>
+
+    <input id="filter" placeholder="filter by name (optional)" />
+
+    <button id="load">Load</button>
+    <span id="status"></span>
+  </header>
+
+  <div class="grid" id="grid"></div>
+
+  <footer>
+    Tip: filenames with spaces are harder to use. Prefer <code>lowercase-hyphens.jpg</code>.
+  </footer>
+
+<script>
+  const OWNER = "saswata221";
+  const REPO  = "event-assets";
+  const BRANCH = "main";
+  const PAGES_BASE = `https://${OWNER}.github.io/${REPO}/`;
+
+  const $folder = document.getElementById("folder");
+  const $filter = document.getElementById("filter");
+  const $status = document.getElementById("status");
+  const $grid   = document.getElementById("grid");
+  document.getElementById("load").addEventListener("click", load);
+
+  // Load on first open
+  load();
+
+  async function load() {
+    const path = $folder.value;
+    const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(path)}?ref=${BRANCH}`;
+    $status.textContent = "Loading…";
+    $grid.innerHTML = "";
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+      let items = await res.json();
+
+      // Keep files only
+      items = items.filter(x => x.type === "file");
+
+      const q = $filter.value.trim().toLowerCase();
+      if (q) items = items.filter(x => x.name.toLowerCase().includes(q));
+
+      if (items.length === 0) {
+        $status.textContent = "No files found in this folder.";
+        return;
+      }
+
+      for (const it of items) {
+        const pagesUrl = PAGES_BASE + `${path}/` + encodeURIComponent(it.name);
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+          <img class="thumb" src="${pagesUrl}" alt="${it.name}" onerror="this.src='';this.style.background='#fafafa';this.style.height='40px';this.outerHTML='<div class=path>(not an image)</div>';">
+          <div class="path" title="${it.name}">${it.name}</div>
+          <div class="row">
+            <button data-url="${pagesUrl}">Copy URL</button>
+            <button data-md='{"url":"${pagesUrl}","name":"${it.name}"}'>Copy &lt;img&gt;</button>
+            <a href="${pagesUrl}" target="_blank">Open</a>
+            <span class="copyok"></span>
+          </div>
+        `;
+        $grid.appendChild(card);
+      }
+
+      // Copy handlers
+      $grid.querySelectorAll("button[data-url]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const url = btn.getAttribute("data-url");
+          await navigator.clipboard.writeText(url);
+          btn.nextElementSibling.nextElementSibling.nextElementSibling.textContent = "Copied ✔";
+          setTimeout(() => btn.nextElementSibling.nextElementSibling.nextElementSibling.textContent = "", 1200);
+        });
+      });
+
+      $grid.querySelectorAll("button[data-md]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const {url,name} = JSON.parse(btn.getAttribute("data-md"));
+          const tag = `<img src="${url}" alt="${name}" />`;
+          await navigator.clipboard.writeText(tag);
+          btn.nextElementSibling.nextElementSibling.textContent = "Copied ✔";
+          setTimeout(() => btn.nextElementSibling.nextElementSibling.textContent = "", 1200);
+        });
+      });
+
+      $status.textContent = `Loaded ${items.length} file(s).`;
+    } catch (e) {
+      console.error(e);
+      $status.textContent = "Failed to load files (rate limit or path?).";
+    }
+  }
+</script>
+</body>
+</html>
