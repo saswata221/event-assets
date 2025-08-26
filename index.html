@@ -1,41 +1,93 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>Event Assets Picker</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 24px; }
-    header { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-    select, input, button { padding: 8px 10px; font-size: 14px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 18px; }
-    .card { border: 1px solid #e3e3e3; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
-    .thumb { width: 100%; height: 150px; object-fit: cover; border-radius: 10px; background:#f6f6f6; }
-    .row { display: flex; gap: 8px; align-items: center; }
-    .path { font-size: 12px; color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .copyok { color: #0a8; font-size: 12px; margin-left: 6px; }
-    footer { margin-top: 20px; color: #666; font-size: 12px; }
+    :root{
+      --bg:#0b0f14;
+      --panel:#10161d;
+      --card:#121a23;
+      --muted:#93a4b7;
+      --text:#e7eef7;
+      --accent:#4da3ff;
+      --accent-2:#22c55e;
+      --border:#1f2a36;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; background:var(--bg); color:var(--text);
+      font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+    }
+    header{
+      position:sticky; top:0; z-index:2;
+      background:linear-gradient(180deg,rgba(11,15,20,.95),rgba(11,15,20,.75));
+      backdrop-filter: blur(6px);
+      border-bottom:1px solid var(--border);
+      padding:14px 18px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;
+    }
+    select, input{
+      background:var(--panel); color:var(--text);
+      border:1px solid var(--border); border-radius:10px;
+      padding:10px 12px; outline:none;
+    }
+    button{
+      border:1px solid var(--border); background:var(--panel); color:var(--text);
+      padding:10px 14px; border-radius:10px; cursor:pointer;
+      transition: transform .08s ease, border-color .2s ease, background .2s ease;
+    }
+    button:hover{ transform: translateY(-1px); border-color:#2b3947; }
+    #load{ background:linear-gradient(180deg,#1a2430,#131b24); }
+    #status{ color:var(--muted); }
+
+    main{ padding:20px; max-width:1200px; margin:0 auto; }
+    .grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap:14px; }
+    .card{
+      background:var(--card); border:1px solid var(--border); border-radius:14px;
+      padding:12px; display:flex; flex-direction:column; gap:10px;
+      box-shadow: 0 6px 20px rgba(0,0,0,.25);
+    }
+    .thumb{
+      width:100%; height:160px; object-fit:cover; border-radius:10px;
+      background:#0e141b;
+    }
+    .name{ font-size:13px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .row{ display:flex; gap:8px; align-items:center; }
+    .btn-open{
+      background:linear-gradient(180deg,rgba(77,163,255,.14),rgba(77,163,255,.05));
+      border-color: rgba(77,163,255,.35);
+    }
+    .btn-open:hover{ border-color: rgba(77,163,255,.6); }
+    .btn-copy{
+      background:linear-gradient(180deg,rgba(34,197,94,.14),rgba(34,197,94,.05));
+      border-color: rgba(34,197,94,.35);
+    }
+    .btn-copy:hover{ border-color: rgba(34,197,94,.6); }
+    .copied{ color:var(--accent-2); font-size:12px; }
+    footer{ color:var(--muted); text-align:center; padding:20px; }
   </style>
 </head>
 <body>
   <header>
-    <strong>Folder:</strong>
-    <select id="folder">
+    <strong style="font-weight:700">Folder</strong>
+    <select id="folder" aria-label="Folder">
       <option value="artists">artists</option>
       <option value="poster">poster</option>
       <option value="h_poster">h_poster</option>
     </select>
 
-    <input id="filter" placeholder="filter by name (optional)" />
-
+    <input id="filter" placeholder="filter by filename (optional)" aria-label="Filter" />
     <button id="load">Load</button>
     <span id="status"></span>
   </header>
 
-  <div class="grid" id="grid"></div>
+  <main>
+    <div class="grid" id="grid"></div>
+  </main>
 
   <footer>
-    Tip: filenames with spaces are harder to use. Prefer <code>lowercase-hyphens.jpg</code>.
+    Tip: prefer <code>lowercase-hyphens.webp</code> (no spaces) for cleaner URLs.
   </footer>
 
 <script>
@@ -49,9 +101,7 @@
   const $status = document.getElementById("status");
   const $grid   = document.getElementById("grid");
   document.getElementById("load").addEventListener("click", load);
-
-  // Load on first open
-  load();
+  load(); // initial
 
   async function load() {
     const path = $folder.value;
@@ -63,59 +113,48 @@
       const res = await fetch(url);
       if (!res.ok) throw new Error(`GitHub API ${res.status}`);
       let items = await res.json();
-
-      // Keep files only
       items = items.filter(x => x.type === "file");
 
       const q = $filter.value.trim().toLowerCase();
       if (q) items = items.filter(x => x.name.toLowerCase().includes(q));
 
-      if (items.length === 0) {
-        $status.textContent = "No files found in this folder.";
-        return;
-      }
+      if (!items.length) { $status.textContent = "No files found."; return; }
 
       for (const it of items) {
         const pagesUrl = PAGES_BASE + `${path}/` + encodeURIComponent(it.name);
         const card = document.createElement("div");
         card.className = "card";
         card.innerHTML = `
-          <img class="thumb" src="${pagesUrl}" alt="${it.name}" onerror="this.src='';this.style.background='#fafafa';this.style.height='40px';this.outerHTML='<div class=path>(not an image)</div>';">
-          <div class="path" title="${it.name}">${it.name}</div>
+          <img class="thumb" src="${pagesUrl}" alt="${it.name}">
+          <div class="name" title="${it.name}">${it.name}</div>
           <div class="row">
-            <button data-url="${pagesUrl}">Copy URL</button>
-            <button data-md='{"url":"${pagesUrl}","name":"${it.name}"}'>Copy &lt;img&gt;</button>
-            <a href="${pagesUrl}" target="_blank">Open</a>
-            <span class="copyok"></span>
+            <button class="btn-copy" data-url="${pagesUrl}">Copy URL</button>
+            <a class="btn-open" href="${pagesUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration:none; display:inline-block; padding:10px 14px; border-radius:10px;">Open</a>
+            <span class="copied"></span>
           </div>
         `;
         $grid.appendChild(card);
       }
 
-      // Copy handlers
-      $grid.querySelectorAll("button[data-url]").forEach(btn => {
+      // copy handler
+      $grid.querySelectorAll(".btn-copy").forEach(btn => {
         btn.addEventListener("click", async () => {
           const url = btn.getAttribute("data-url");
-          await navigator.clipboard.writeText(url);
-          btn.nextElementSibling.nextElementSibling.nextElementSibling.textContent = "Copied ✔";
-          setTimeout(() => btn.nextElementSibling.nextElementSibling.nextElementSibling.textContent = "", 1200);
-        });
-      });
-
-      $grid.querySelectorAll("button[data-md]").forEach(btn => {
-        btn.addEventListener("click", async () => {
-          const {url,name} = JSON.parse(btn.getAttribute("data-md"));
-          const tag = `<img src="${url}" alt="${name}" />`;
-          await navigator.clipboard.writeText(tag);
-          btn.nextElementSibling.nextElementSibling.textContent = "Copied ✔";
-          setTimeout(() => btn.nextElementSibling.nextElementSibling.textContent = "", 1200);
+          try {
+            await navigator.clipboard.writeText(url);
+            const ok = btn.parentElement.querySelector(".copied");
+            ok.textContent = "Copied ✓";
+            setTimeout(() => ok.textContent = "", 1200);
+          } catch {
+            alert("Copy failed. Your browser may block clipboard access here.");
+          }
         });
       });
 
       $status.textContent = `Loaded ${items.length} file(s).`;
     } catch (e) {
       console.error(e);
-      $status.textContent = "Failed to load files (rate limit or path?).";
+      $status.textContent = "Failed to load files (rate limit or wrong path?).";
     }
   }
 </script>
