@@ -65,7 +65,19 @@
     }
     .btn-copy:hover{ border-color: rgba(34,197,94,.6); }
     .copied{ color:var(--accent-2); font-size:12px; }
-    footer{ color:var(--muted); text-align:center; padding:20px; }
+   footer{
+    color:var(--muted); padding:20px;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    border-top:1px solid var(--border);
+  }
+  .btn-travel{
+    border:1px solid var(--border);
+    background:linear-gradient(180deg,rgba(77,163,255,.14),rgba(77,163,255,.05));
+    border-color: rgba(77,163,255,.35);
+    color:var(--text); text-decoration:none;
+    padding:10px 14px; border-radius:10px;
+  }
+  .btn-travel:hover{ border-color: rgba(77,163,255,.6); }
   </style>
 </head>
 <body>
@@ -87,8 +99,9 @@
   </main>
 
   <footer>
-    Tip: prefer <code>lowercase-hyphens.webp</code> (no spaces) for cleaner URLs.
-  </footer>
+  <span>Tip: prefer <code>lowercase-hyphens.webp</code> (no spaces) for cleaner URLs.</span>
+  <a class="btn-travel" href="./travel.html" rel="noopener">Browse Travel →</a>
+</footer>
 
 <script>
   const OWNER = "saswata221";
