@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Travel Assets Browser</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --bg:#0b0f14; --panel:#10161d; --card:#121a23; --muted:#93a4b7;
+      --text:#e7eef7; --accent:#4da3ff; --accent-2:#22c55e; --border:#1f2a36;
+    }
+    *{box-sizing:border-box}
+    body{ margin:0; background:var(--bg); color:var(--text);
+      font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; }
+
+    header{
+      position:sticky; top:0; z-index:2;
+      background:linear-gradient(180deg,rgba(11,15,20,.95),rgba(11,15,20,.75));
+      backdrop-filter: blur(6px);
+      border-bottom:1px solid var(--border);
+      padding:14px 18px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;
+    }
+    .spacer{ flex:1 }
+    select, input{
+      background:var(--panel); color:var(--text);
+      border:1px solid var(--border); border-radius:10px;
+      padding:10px 12px; outline:none;
+    }
+    button, a.btn{
+      border:1px solid var(--border); background:var(--panel); color:var(--text);
+      padding:10px 14px; border-radius:10px; cursor:pointer;
+      transition: transform .08s ease, border-color .2s ease, background .2s ease;
+      text-decoration:none; display:inline-flex; align-items:center; gap:8px;
+    }
+    button:hover, a.btn:hover{ transform: translateY(-1px); border-color:#2b3947; }
+    #load{ background:linear-gradient(180deg,#1a2430,#131b24); }
+    #status{ color:var(--muted); }
+
+    .btn-open{
+      background:linear-gradient(180deg,rgba(77,163,255,.14),rgba(77,163,255,.05));
+      border-color: rgba(77,163,255,.35);
+    }
+    .btn-open:hover{ border-color: rgba(77,163,255,.6); }
+    .btn-copy{
+      background:linear-gradient(180deg,rgba(34,197,94,.14),rgba(34,197,94,.05));
+      border-color: rgba(34,197,94,.35);
+    }
+    .btn-copy:hover{ border-color: rgba(34,197,94,.6); }
+    .btn-back{
+      background:linear-gradient(180deg,rgba(148,163,184,.12),rgba(148,163,184,.06));
+      border-color: rgba(148,163,184,.35);
+    }
+
+    main{ padding:20px; max-width:1200px; margin:0 auto; }
+    .topbar{ display:flex; align-items:center; gap:10px; margin-bottom:12px; color:var(--muted); }
+    .crumbs{ color:var(--muted); }
+    .crumbs b{ color:var(--text) }
+
+    .grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap:14px; }
+    .card{
+      background:var(--card); border:1px solid var(--border); border-radius:14px;
+      padding:12px; display:flex; flex-direction:column; gap:10px;
+      box-shadow: 0 6px 20px rgba(0,0,0,.25);
+    }
+    .thumb{
+      width:100%; height:160px; object-fit:cover; border-radius:10px; background:#0e141b;
+    }
+    .name{ font-size:13px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+    .folder-card{
+      height:160px; border:1px dashed #334155; display:flex; align-items:center; justify-content:center;
+      border-radius:10px; background:linear-gradient(180deg,rgba(77,163,255,.06),rgba(77,163,255,.02));
+      font-weight:600;
+    }
+    .row{ display:flex; gap:8px; align-items:center; }
+
+    footer{
+      color:var(--muted); padding:20px; display:flex; justify-content:space-between; align-items:center; gap:12px;
+      border-top:1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="btn" href="./index.html" rel="noopener">← Back to Index</a>
+    <div class="spacer"></div>
+    <input id="filter" placeholder="filter by name (folder or file)" aria-label="Filter" />
+    <button id="load">Reload</button>
+    <span id="status"></span>
+  </header>
+
+  <main>
+    <div class="topbar">
+      <button id="back" class="btn btn-back" disabled>Back</button>
+      <div class="crumbs" id="crumbs">Travel</div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </main>
+
+  <footer>
+    <span>Structure: <code>Travel/&lt;place&gt;/image.webp</code></span>
+    <a class="btn btn-open" href="https://github.com/saswata221/event-assets/tree/main/Travel" target="_blank" rel="noopener">Open Travel in GitHub</a>
+  </footer>
+
+<script>
+  // ------- CONFIG -------
+  const OWNER  = "saswata221";
+  const REPO   = "event-assets";
+  const BRANCH = "main";
+  const ROOT   = "Travel";  // base folder for this page
+  const PAGES_BASE = `https://${OWNER}.github.io/${REPO}/`;
+
+  // ------- ELEMENTS -------
+  const $grid   = document.getElementById("grid");
+  const $status = document.getElementById("status");
+  const $filter = document.getElementById("filter");
+  const $crumbs = document.getElementById("crumbs");
+  const $back   = document.getElementById("back");
+  document.getElementById("load").addEventListener("click", () => refresh());
+  $back.addEventListener("click", goUp);
+
+  // ------- STATE -------
+  // null => at ROOT (show subfolders)
+  // "bali" => inside a place (show files)
+  let currentPlace = null;
+
+  // initial load
+  refresh();
+
+  async function refresh() {
+    $status.textContent = "Loading…";
+    $grid.innerHTML = "";
+    $crumbs.innerHTML = currentPlace ? `Travel › <b>${escapeHtml(currentPlace)}</b>` : "Travel";
+    $back.disabled = !currentPlace;
+
+    try {
+      if (!currentPlace) {
+        // list subfolders (places) inside Travel/
+        const dirs = await listDir(ROOT);
+        let items = dirs.filter(x => x.type === "dir");
+        const q = $filter.value.trim().toLowerCase();
+        if (q) items = items.filter(x => x.name.toLowerCase().includes(q));
+        if (!items.length) { $status.textContent = "No places found."; return; }
+
+        for (const it of items) {
+          const card = document.createElement("div");
+          card.className = "card";
+          card.innerHTML = `
+            <div class="folder-card" role="button" tabindex="0" aria-label="Open ${it.name}">
+              📁 ${escapeHtml(it.name)}
+            </div>
+            <div class="name">place: ${escapeHtml(it.name)}</div>
+          `;
+          card.querySelector(".folder-card").addEventListener("click", () => {
+            currentPlace = it.name;
+            refresh();
+          });
+          card.querySelector(".folder-card").addEventListener("keypress", (e) => {
+            if (e.key === "Enter" || e.key === " ") { currentPlace = it.name; refresh(); }
+          });
+          $grid.appendChild(card);
+        }
+        $status.textContent = `Loaded ${items.length} place(s).`;
+      } else {
+        // list files inside Travel/<place>
+        const path = `${ROOT}/${currentPlace}`;
+        let files = await listDir(path);
+        files = files.filter(x => x.type === "file");
+        const q = $filter.value.trim().toLowerCase();
+        if (q) files = files.filter(x => x.name.toLowerCase().includes(q));
+        if (!files.length) { $status.textContent = "No files found in this place."; return; }
+
+        for (const it of files) {
+          const pagesUrl = PAGES_BASE + `${path}/` + encodeURIComponent(it.name);
+          const card = document.createElement("div");
+          card.className = "card";
+          card.innerHTML = `
+            <img class="thumb" src="${pagesUrl}" alt="${it.name}">
+            <div class="name" title="${it.name}">${it.name}</div>
+            <div class="row">
+              <button class="btn btn-copy" data-url="${pagesUrl}">Copy URL</button>
+              <a class="btn btn-open" href="${pagesUrl}" target="_blank" rel="noopener">Open</a>
+              <span class="name" style="flex:1"></span>
+            </div>
+          `;
+          card.querySelector(".btn-copy").addEventListener("click", () => copyToClipboard(pagesUrl));
+          $grid.appendChild(card);
+        }
+        $status.textContent = `Loaded ${files.length} file(s).`;
+      }
+    } catch (e) {
+      console.error(e);
+      $status.textContent = "Failed to load (rate limit or wrong path?).";
+    }
+  }
+
+  async function listDir(path) {
+    const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(path)}?ref=${BRANCH}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`GitHub API ${res.status}`);
+    return res.json();
+  }
+
+  function goUp() {
+    if (currentPlace) {
+      currentPlace = null;
+      refresh();
+    }
+  }
+
+  async function copyToClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      $status.textContent = "Copied ✓";
+      setTimeout(() => { if ($status.textContent.startsWith("Copied")) $status.textContent = ""; }, 1000);
+    } catch {
+      alert("Copy failed. Your browser may block clipboard access here.");
+    }
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+</script>
+</body>
+</html>
